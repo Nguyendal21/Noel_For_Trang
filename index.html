@@ -3,330 +3,464 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Three.js Interactive Christmas Tree</title>
+    <title>3D Interactive Christmas Particles</title>
     <style>
         body {
             margin: 0;
             overflow: hidden;
-            background-color: #020205; /* Nền tối hơn để làm nổi bật đèn */
+            background-color: #000;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: white;
         }
 
         #canvas-container {
+            width: 100vw;
+            height: 100vh;
             position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
+            top: 0;
+            left: 0;
             z-index: 1;
-            /* Tạo hiệu ứng nền trời đêm nhẹ */
-            background: radial-gradient(circle at center, #111 0%, #020205 100%);
         }
 
-        /* UI Control Panel */
-        #ui-panel {
+        /* UI Overlay */
+        #ui-layer {
             position: absolute;
-            top: 20px; left: 20px; z-index: 10;
-            background: rgba(0, 0, 0, 0.5); /* Tối hơn và trong suốt hơn */
-            backdrop-filter: blur(8px);
-            padding: 15px;
-            border-radius: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            color: white;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-            width: 200px;
-        }
-
-        h2 { margin: 0 0 10px 0; font-size: 16px; text-transform: uppercase; color: #ffdf00; } /* Màu vàng kim */
-
-        /* Webcam preview (flipped) */
-        #webcam-preview {
-            position: absolute; bottom: 20px; right: 20px;
-            width: 120px; height: 90px; /* Nhỏ hơn một chút */
-            border-radius: 8px;
-            border: 2px solid rgba(255,215,0,0.3); /* Viền vàng nhạt */
+            top: 20px;
+            left: 20px;
             z-index: 10;
-            transform: scaleX(-1);
-            object-fit: cover;
-            background: #000;
-            opacity: 0.7; /* Làm mờ webcam đi một chút để đỡ phân tâm */
-            transition: opacity 0.3s;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 15px;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            max-width: 300px;
         }
-        #webcam-preview:hover { opacity: 1; }
 
-        #status { font-size: 13px; font-weight: bold; margin-top: 5px; }
+        h1 {
+            font-size: 18px;
+            margin: 0 0 10px 0;
+            color: #4ade80;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        p {
+            font-size: 13px;
+            color: #ccc;
+            line-height: 1.5;
+        }
+
+        .control-group {
+            margin-top: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        input[type="color"] {
+            width: 100%;
+            height: 40px;
+            border: none;
+            cursor: pointer;
+            background: none;
+        }
+
+        /* Camera feed (hidden or small preview) */
+        #video-feed {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 160px;
+            height: 120px;
+            z-index: 10;
+            border-radius: 10px;
+            transform: scaleX(-1); /* Mirror effect */
+            border: 2px solid #4ade80;
+            background: #222;
+        }
+
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 20;
+            font-size: 24px;
+            font-weight: bold;
+            color: #4ade80;
+            text-align: center;
+            background: rgba(0,0,0,0.8);
+            padding: 40px;
+            border-radius: 20px;
+        }
         
-        .loading-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: #020205; color: #ffdf00;
-            display: flex; justify-content: center; align-items: center; font-size: 20px;
-            z-index: 999; transition: opacity 0.8s ease-out;
+        .status {
+            font-size: 12px;
+            margin-top: 5px;
+            color: #ffcc00;
         }
     </style>
-</head>
-<body>
-
-    <div id="loading" class="loading-overlay">
-        <div>🎄 Đang chuẩn bị cây thông Noel... 🎄</div>
-    </div>
-
-    <div id="ui-panel">
-        <h2>Tương Tác Cây Thông</h2>
-        <div id="status" style="color: #aaa;">Đang đợi camera...</div>
-        <div style="font-size: 11px; margin-top:15px; color:#ccc; line-height: 1.4;">
-            Sử dụng <b>2 tay</b> trước camera:<br>
-            ↔️ Kéo ra xa: Cây "bung" ra.<br>
-            ➡️⬅️ Đưa lại gần: Cây thu lại.
-        </div>
-    </div>
-
-    <video id="webcam-preview" playsinline></video>
-    <div id="canvas-container"></div>
-
+    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+</head>
+<body>
+
+    <div id="loading">Đang khởi động Camera & AI...<br><span style="font-size:14px; color:#aaa">Vui lòng đợi giây lát</span></div>
+
+    <div id="ui-layer">
+        <h1>Giáng Sinh 3D Tương Tác</h1>
+        <p>👋 <b>Cách dùng:</b> Giơ <b>CẢ HAI TAY</b> lên trước camera.</p>
+        <ul style="padding-left: 20px; margin: 5px 0; font-size: 12px; color: #ddd;">
+            <li>↔️ <b>Khoảng cách 2 tay:</b> Phóng to / Thu nhỏ hạt.</li>
+            <li>ew️ <b>Di chuyển trái/phải:</b> Xoay cây thông.</li>
+        </ul>
+        <div class="status" id="hand-status">Trạng thái: Chưa thấy tay...</div>
+
+        <div class="control-group">
+            <label>Màu chủ đạo (Lá cây):</label>
+            <input type="color" id="colorPicker" value="#2dff4e">
+        </div>
+    </div>
+
+    <video id="video-feed" autoplay playsinline></video>
+
+    <div id="canvas-container"></div>
 
     <script>
-        // --- 1. CONFIGURATION & STATE ---
-        const PARTICLE_COUNT = 5000; // Tăng số lượng hạt cho cây dày hơn
-        const TREE_HEIGHT = 60;
-        const TREE_BASE_RADIUS = 25;
-        
-        let expansionFactor = 1.0;
-        let targetExpansion = 1.0;
-        let particlesMesh;
-        // Store original position AND its distance from center (radius) for expansion math
-        let originalData = []; 
-        
+        // --- 1. CONFIGURATION ---
+        const CONFIG = {
+            particleCount: 4000,
+            trunkColor: new THREE.Color(0x8B4513),
+            leafColor: new THREE.Color(0x2dff4e), // Default green
+            ornamentColors: [0xff0000, 0xffd700, 0x00ffff, 0xff00ff], // Red, Gold, Cyan, Magenta
+            spreadFactor: 0, // 0 = Tree, 1 = Exploded
+            rotationY: 0
+        };
+
         // --- 2. THREE.JS SETUP ---
         const container = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
-        // Fog nhẹ màu tối để tạo chiều sâu
-        scene.fog = new THREE.FogExp2(0x020205, 0.003);
+        // Add subtle fog
+        scene.fog = new THREE.FogExp2(0x000000, 0.002);
 
-        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-        // Di chuyển camera ra xa và lên cao một chút để nhìn toàn cảnh cây
-        camera.position.set(0, 10, 120);
-        camera.lookAt(0, 5, 0);
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 30;
+        camera.position.y = 10;
+        camera.lookAt(0, 10, 0);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio);
         container.appendChild(renderer.domElement);
 
-        // --- 3. CREATE CHRISTMAS TREE PARTICLES ---
-        function createTexture() {
-            // Texture đốm sáng mềm (giống đèn led)
+        // --- 3. PARTICLE SYSTEM GENERATION (THE CHRISTMAS TREE) ---
+        
+        // Helper to generate a glowing circle texture programmatically
+        function createSprite() {
             const canvas = document.createElement('canvas');
-            canvas.width = 32; canvas.height = 32;
+            canvas.width = 32;
+            canvas.height = 32;
             const context = canvas.getContext('2d');
             const gradient = context.createRadialGradient(16, 16, 0, 16, 16, 16);
             gradient.addColorStop(0, 'rgba(255,255,255,1)');
-            gradient.addColorStop(0.3, 'rgba(255,255,255,0.6)');
+            gradient.addColorStop(0.2, 'rgba(255,255,255,0.8)');
+            gradient.addColorStop(0.5, 'rgba(255,255,255,0.2)');
             gradient.addColorStop(1, 'rgba(0,0,0,0)');
             context.fillStyle = gradient;
             context.fillRect(0, 0, 32, 32);
-            return new THREE.Texture(canvas);
+            
+            const texture = new THREE.Texture(canvas);
+            texture.needsUpdate = true;
+            return texture;
         }
 
-        function initParticles() {
-            const geometry = new THREE.BufferGeometry();
-            const positions = [];
-            const colors = [];
+        const geometry = new THREE.BufferGeometry();
+        const positions = [];
+        const targetPositions = []; // The "Tree" shape
+        const randomPositions = []; // The "Exploded" shape
+        const colors = [];
+        const sizes = [];
+
+        // Logic to build the tree
+        for (let i = 0; i < CONFIG.particleCount; i++) {
+            let x, y, z, r, g, b, size;
             
-            const texture = createTexture();
-            texture.needsUpdate = true;
+            // Random variable to decide particle type
+            const type = Math.random();
 
-            for (let i = 0; i < PARTICLE_COUNT; i++) {
-                // --- TẠO HÌNH DÁNG CÂY THÔNG ---
-                // percentUp: 0 là đáy, 1 là đỉnh. 
-                // Dùng Math.pow để tập trung nhiều hạt hơn ở phần dưới (tán cây dày hơn ở gốc)
-                const percentUp = Math.pow(Math.random(), 1.2); 
+            if (type < 0.15) { 
+                // TRUNK (Cylinder)
+                const radius = Math.random() * 2;
+                const theta = Math.random() * Math.PI * 2;
+                y = Math.random() * 8; // Height 0 to 8
+                x = radius * Math.cos(theta);
+                z = radius * Math.sin(theta);
                 
-                // Tính toán vị trí Y (chiều cao)
-                // Đặt gốc cây thấp hơn trục trung tâm một chút
-                const y = (percentUp * TREE_HEIGHT) - (TREE_HEIGHT * 0.4);
-
-                // Bán kính tối đa tại độ cao này (càng lên cao càng nhỏ)
-                // (1 - percentUp) sẽ giảm từ 1 về 0 khi lên đỉnh
-                const maxRadiusAtHeight = TREE_BASE_RADIUS * (1 - percentUp);
-
-                // Tạo vị trí ngẫu nhiên trong hình tròn bán kính maxRadiusAtHeight
-                // Dùng sqrt(random) để phân bố đều trong hình tròn
-                const r = maxRadiusAtHeight * Math.sqrt(Math.random()) * 1.1; // Nhân nhẹ 1.1 để cây trông xốp hơn
-                const theta = Math.random() * Math.PI * 2; // Góc ngẫu nhiên
-
-                const x = r * Math.cos(theta);
-                const z = r * Math.sin(theta);
-
-                positions.push(x, y, z);
+                const col = CONFIG.trunkColor;
+                r = col.r; g = col.g; b = col.b;
+                size = 0.3;
                 
-                // Lưu dữ liệu gốc để tính toán mở rộng sau này
-                // Chúng ta cần vector chuẩn hóa từ tâm để biết hướng "nổ"
-                const distance = Math.sqrt(x*x + y*y + z*z) || 1; // avoid div by zero
-                originalData.push({
-                    x: x, y: y, z: z,
-                    normX: x/distance, normY: y/distance, normZ: z/distance,
-                    dist: distance
-                });
+            } else if (type < 0.9) {
+                // LEAVES (Cone layers)
+                // Cone shape: Radius decreases as Height increases
+                y = 5 + Math.random() * 20; // Height 5 to 25
+                const maxRadius = 12 * (1 - (y - 5) / 20); // Radius gets smaller at top
+                const radius = Math.random() * maxRadius;
+                const theta = Math.random() * Math.PI * 2;
+                
+                x = radius * Math.cos(theta);
+                z = radius * Math.sin(theta);
 
-                // --- TẠO MÀU SẮC RGB ĐA DẠNG (FESTIVE COLORS) ---
-                const randColorType = Math.random();
-                let rCol, gCol, bCol;
+                // Add some spiral randomness
+                x += Math.sin(y * 0.5) * 0.5;
+                z += Math.cos(y * 0.5) * 0.5;
 
-                if (randColorType < 0.65) { 
-                    // 65% là màu Xanh lá cây (thân lá) với biến thể nhẹ
-                    rCol = 0.1 + Math.random() * 0.2;
-                    gCol = 0.5 + Math.random() * 0.5; // Xanh tươi
-                    bCol = 0.1 + Math.random() * 0.2;
-                } else if (randColorType < 0.80) {
-                    // 15% là Đỏ (quả châu)
-                    rCol = 0.8 + Math.random() * 0.2;
-                    gCol = Math.random() * 0.2;
-                    bCol = Math.random() * 0.2;
-                } else if (randColorType < 0.92) {
-                     // 12% là Vàng kim (đèn/dây kim tuyến)
-                    rCol = 0.9 + Math.random() * 0.1;
-                    gCol = 0.8 + Math.random() * 0.2;
-                    bCol = Math.random() * 0.2;
+                const col = CONFIG.leafColor;
+                // Add slight variation to green
+                r = col.r + (Math.random() - 0.5) * 0.2;
+                g = col.g + (Math.random() - 0.5) * 0.2;
+                b = col.b + (Math.random() - 0.5) * 0.2;
+                size = 0.4;
+
+            } else {
+                // ORNAMENTS & LIGHTS (Outer surface of cone)
+                y = 6 + Math.random() * 18;
+                const maxRadius = 12 * (1 - (y - 5) / 20);
+                const radius = maxRadius + 0.5; // Slightly outside leaves
+                const theta = Math.random() * Math.PI * 2;
+                
+                x = radius * Math.cos(theta);
+                z = radius * Math.sin(theta);
+
+                // Spiral LED strip effect
+                if (Math.random() > 0.5) {
+                    // LED Strip
+                    const stripRadius = maxRadius * 1.1;
+                    const stripTheta = y * 0.5; // Spiral
+                    x = stripRadius * Math.cos(stripTheta + (Math.random()*0.5));
+                    z = stripRadius * Math.sin(stripTheta + (Math.random()*0.5));
+                    size = 0.8;
+                    r=1; g=1; b=0.8; // Warm light
                 } else {
-                    // 8% là Xanh dương/Trắng (đèn nháy lạnh)
-                    rCol = 0.2 + Math.random() * 0.8;
-                    gCol = 0.2 + Math.random() * 0.8;
-                    bCol = 1.0;
+                    // Balls
+                    const colorHex = CONFIG.ornamentColors[Math.floor(Math.random() * CONFIG.ornamentColors.length)];
+                    const tempColor = new THREE.Color(colorHex);
+                    r = tempColor.r; g = tempColor.g; b = tempColor.b;
+                    size = 1.0;
                 }
-                colors.push(rCol, gCol, bCol);
             }
 
-            geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-            // QUAN TRỌNG: Thêm thuộc tính màu cho vertex
-            geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+            // Target Position (Tree Shape)
+            targetPositions.push(x, y, z);
+            
+            // Initial Position (Random/Exploded)
+            const range = 100;
+            const rx = (Math.random() - 0.5) * range;
+            const ry = (Math.random() - 0.5) * range;
+            const rz = (Math.random() - 0.5) * range;
+            randomPositions.push(rx, ry, rz);
+            
+            // Current Position (Start at random)
+            positions.push(rx, ry, rz);
 
-            const material = new THREE.PointsMaterial({
-                size: 2.5, // Kích thước hạt lớn hơn để rõ màu
-                map: texture,
-                vertexColors: true, // KÍCH HOẠT MÀU ĐA DẠNG
-                transparent: true,
-                opacity: 0.9,
-                blending: THREE.AdditiveBlending, // Pha trộn kiểu ánh sáng
-                depthWrite: false // Giúp các hạt trong suốt chồng lên nhau đẹp hơn
-            });
-
-            particlesMesh = new THREE.Points(geometry, material);
-            scene.add(particlesMesh);
+            colors.push(r, g, b);
+            sizes.push(size);
         }
 
-        initParticles();
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        geometry.setAttribute('targetPos', new THREE.Float32BufferAttribute(targetPositions, 3));
+        geometry.setAttribute('randomPos', new THREE.Float32BufferAttribute(randomPositions, 3));
+        geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+        geometry.setAttribute('size', new THREE.Float32BufferAttribute(sizes, 1));
 
-        // --- 4. MEDIAPIPE HAND TRACKING (Giữ nguyên logic cũ) ---
-        const videoElement = document.getElementById('webcam-preview');
-        const statusElement = document.getElementById('status');
+        // Shader Material for better performance and look
+        const material = new THREE.PointsMaterial({
+            size: 1,
+            vertexColors: true,
+            map: createSprite(),
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            transparent: true,
+            opacity: 0.8
+        });
+
+        const particleSystem = new THREE.Points(geometry, material);
+        scene.add(particleSystem);
+
+        // --- 4. COLOR PICKER LOGIC ---
+        const colorPicker = document.getElementById('colorPicker');
+        colorPicker.addEventListener('input', (e) => {
+            const hex = e.target.value;
+            const newColor = new THREE.Color(hex);
+            CONFIG.leafColor = newColor;
+
+            // Update only leaf particles (approximate by index range or logic re-check)
+            // Since we didn't save "type" in buffer, we'll just tint greens roughly
+            // A simple hack: Update all "greenish" particles
+            const colorsAttr = geometry.attributes.color;
+            for(let i=0; i < CONFIG.particleCount; i++) {
+                const r = colorsAttr.getX(i);
+                const g = colorsAttr.getY(i);
+                const b = colorsAttr.getZ(i);
+
+                // Heuristic: If green is dominant, it's a leaf
+                if (g > r && g > b) {
+                    colorsAttr.setXYZ(i, 
+                        newColor.r + (Math.random()-0.5)*0.1, 
+                        newColor.g + (Math.random()-0.5)*0.1, 
+                        newColor.b + (Math.random()-0.5)*0.1
+                    );
+                }
+            }
+            colorsAttr.needsUpdate = true;
+        });
+
+
+        // --- 5. MEDIAPIPE HAND TRACKING ---
+        const videoElement = document.getElementById('video-feed');
+        const statusElement = document.getElementById('hand-status');
 
         function onResults(results) {
-            if (results.multiHandLandmarks && results.multiHandLandmarks.length === 2) {
-                statusElement.innerText = "🎄 Đã nhận 2 tay!";
-                statusElement.style.color = "#00ff00";
+            document.getElementById('loading').style.display = 'none';
 
-                const hand1 = results.multiHandLandmarks[0][9]; 
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length === 2) {
+                statusElement.innerText = "Trạng thái: Đã kết nối 2 tay! 👌";
+                statusElement.style.color = "#4ade80";
+
+                const hand1 = results.multiHandLandmarks[0][9]; // Middle finger knuckle (center of hand)
                 const hand2 = results.multiHandLandmarks[1][9];
+
+                // 1. Calculate Distance (Zoom/Explode Control)
+                // Distance ranges roughly from 0.1 to 0.8 usually in camera view
                 const dx = hand1.x - hand2.x;
                 const dy = hand1.y - hand2.y;
                 const distance = Math.sqrt(dx*dx + dy*dy);
+                
+                // Map distance to spread factor
+                // Close hands (dist < 0.2) = Tree (0)
+                // Far hands (dist > 0.6) = Exploded (1)
+                let targetSpread = (distance - 0.15) * 2.5; 
+                targetSpread = Math.max(0, Math.min(1, targetSpread));
+                
+                // Smooth interpolation
+                CONFIG.spreadFactor += (targetSpread - CONFIG.spreadFactor) * 0.1;
 
-                // Map distance to expansion (tuned for better feel)
-                const minD = 0.15; const maxD = 0.7;
-                const minS = 1.0;  const maxS = 5.5;
-                const clampedDist = Math.max(minD, Math.min(maxD, distance));
-                const percent = (clampedDist - minD) / (maxD - minD);
-                targetExpansion = minS + (percent * (maxS - minS));
+                // 2. Calculate Rotation (Left/Right movement)
+                const avgX = (hand1.x + hand2.x) / 2;
+                // avgX is 0 (left) to 1 (right). 0.5 is center.
+                // Map to rotation speed or angle
+                const targetRot = (avgX - 0.5) * 4; // -2 to +2 radians
+                
+                // Smooth rotation
+                // Accumulate rotation based on offset from center
+                CONFIG.rotationY += targetRot * 0.05; 
 
+            } else if (results.multiHandLandmarks && results.multiHandLandmarks.length === 1) {
+                statusElement.innerText = "Trạng thái: Cần 2 tay để điều khiển";
+                statusElement.style.color = "#ffcc00";
+                // Slowly return to tree if hands lost
+                CONFIG.spreadFactor += (0 - CONFIG.spreadFactor) * 0.05;
             } else {
-                statusElement.innerText = results.multiHandLandmarks.length === 1 ? "Cần thêm 1 tay..." : "Đang tìm tay...";
-                statusElement.style.color = results.multiHandLandmarks.length === 1 ? "orange" : "#aaa";
-                targetExpansion = 1.0; // Reset về trạng thái cây bình thường
+                statusElement.innerText = "Trạng thái: Không thấy tay...";
+                statusElement.style.color = "#ff5555";
+                // Auto rotate if idle
+                CONFIG.rotationY += 0.002;
+                CONFIG.spreadFactor += (0 - CONFIG.spreadFactor) * 0.05;
             }
         }
 
-        const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
-        hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
-        hands.onResults(onResults);
+        const hands = new Hands({locateFile: (file) => {
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+        }});
 
-        const cameraUtils = new Camera(videoElement, {
-            onFrame: async () => { await hands.send({image: videoElement}); },
-            width: 320, height: 240
+        hands.setOptions({
+            maxNumHands: 2,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
         });
 
-        cameraUtils.start().then(() => {
-            const loader = document.getElementById('loading');
-            loader.style.opacity = 0;
-            setTimeout(() => loader.remove(), 850);
-        }).catch(err => alert("Lỗi Camera: " + err));
+        hands.onResults(onResults);
 
+        const cameraFeed = new Camera(videoElement, {
+            onFrame: async () => {
+                await hands.send({image: videoElement});
+            },
+            width: 640,
+            height: 480
+        });
+        cameraFeed.start();
 
-        // --- 5. ANIMATION LOOP ---
-        let time = 0;
+        // --- 6. ANIMATION LOOP ---
+        const clock = new THREE.Clock();
+
         function animate() {
             requestAnimationFrame(animate);
-            time += 0.01;
 
-            // Hiệu ứng nội suy mượt mà cho việc mở rộng/thu nhỏ
-            expansionFactor += (targetExpansion - expansionFactor) * 0.1;
+            const time = clock.getElapsedTime();
+            
+            // Rotate the whole system
+            particleSystem.rotation.y = CONFIG.rotationY;
 
-            const positions = particlesMesh.geometry.attributes.position.array;
+            // Particle Physics & Interpolation
+            const positionsAttr = geometry.attributes.position;
+            const targetAttr = geometry.attributes.targetPos;
+            const randomAttr = geometry.attributes.randomPos;
 
-            for (let i = 0; i < PARTICLE_COUNT; i++) {
-                const data = originalData[i];
-                const i3 = i * 3;
+            for (let i = 0; i < CONFIG.particleCount; i++) {
+                // Get target components
+                const tx = targetAttr.getX(i);
+                const ty = targetAttr.getY(i);
+                const tz = targetAttr.getZ(i);
 
-                // --- LOGIC CHUYỂN ĐỘNG MỚI ---
-                // Khi ở trạng thái cây (expansionFactor gần 1), chúng ta muốn nó giữ hình dạng cây.
-                // Khi mở rộng, chúng ta muốn nó bay ra từ tâm theo hướng của nó.
+                // Get random components
+                const rx = randomAttr.getX(i);
+                const ry = randomAttr.getY(i);
+                const rz = randomAttr.getZ(i);
 
-                // 1. Vị trí cơ bản của cây (rung rinh nhẹ để tạo sự sống động)
-                // Rung rinh nhiều hơn ở phần lá (màu xanh) và ít hơn ở phần đèn
-                const isLeaf = particlesMesh.geometry.attributes.color.array[i3+1] > 0.4; // Check kênh Green
-                const windForce = isLeaf ? 0.8 : 0.3;
-                
-                const treeX = data.x + Math.cos(time + data.y * 0.1) * windForce;
-                const treeY = data.y + Math.sin(time * 1.5 + data.x * 0.1) * (windForce * 0.5);
-                const treeZ = data.z;
+                // Interpolate based on spreadFactor (Hand distance)
+                // 0 = Tree, 1 = Explosion
+                let x = tx + (rx - tx) * CONFIG.spreadFactor;
+                let y = ty + (ry - ty) * CONFIG.spreadFactor;
+                let z = tz + (rz - tz) * CONFIG.spreadFactor;
 
-                // 2. Vị trí khi nổ (bay ra xa khỏi tâm)
-                // Sử dụng vector chuẩn hóa (normX, normY, normZ) * khoảng cách * hệ số mở rộng
-                // Thêm một chút nhiễu (noise) khi nổ để trông hỗn loạn hơn
-                const explosionNoise = 1 + (Math.random()-0.5) * 0.2 * (expansionFactor - 1);
-                const explodedDist = data.dist * expansionFactor * explosionNoise;
-                
-                const explodedX = data.normX * explodedDist;
-                const explodedY = data.normY * explodedDist;
-                const explodedZ = data.normZ * explodedDist;
+                // Add "Twinkle" / "Alive" movement
+                if (CONFIG.spreadFactor < 0.2) {
+                    // Only wiggle when in tree form
+                    x += Math.sin(time * 2 + y) * 0.02;
+                    y += Math.cos(time * 1.5 + x) * 0.02;
+                } else {
+                    // Float around when exploded
+                    x += Math.sin(time + i) * 0.05;
+                    y += Math.cos(time + i) * 0.05;
+                }
 
-                // 3. Pha trộn giữa hai trạng thái dựa trên expansionFactor
-                // Nếu expansionFactor là 1 -> dùng treePos. Nếu lớn hơn -> blend sang explodedPos.
-                // Sử dụng một hàm smoothstep hoặc tương tự để chuyển đổi mượt mà hơn
-                let blendRatio = Math.max(0, expansionFactor - 1.0); // 0 tại trạng thái cây, tăng dần khi mở rộng
-                blendRatio = Math.min(1, blendRatio / 2.0); // Chuẩn hóa để blendRatio max là 1 khi expansionFactor khoảng 3
-
-                // Nội suy tuyến tính (Lerp) giữa vị trí cây và vị trí nổ
-                positions[i3]     = treeX + (explodedX - treeX) * blendRatio;
-                positions[i3 + 1] = treeY + (explodedY - treeY) * blendRatio;
-                positions[i3 + 2] = treeZ + (explodedZ - treeZ) * blendRatio;
+                positionsAttr.setXYZ(i, x, y, z);
             }
+            positionsAttr.needsUpdate = true;
 
-            particlesMesh.geometry.attributes.position.needsUpdate = true;
-
-            // Xoay nhẹ toàn bộ cây để xem 3D
-            particlesMesh.rotation.y = Math.sin(time * 0.2) * 0.15; 
+            // Dynamic Camera movement slightly based on mouse/hand for parallax (optional polish)
+            // Kept simple for now as requested.
 
             renderer.render(scene, camera);
         }
 
-        animate();
-
+        // Handle Window Resize
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
+
+        animate();
 
     </script>
 </body>
